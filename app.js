@@ -121,7 +121,7 @@ const AMAE_MODE_LABELS = {
 
 function parseImportQuery(raw) {
   const text = String(raw || "").trim();
-  const fromUrl = text.match(/\/player\/(\d+)(?:\/(\d+))?/i);
+  const fromUrl = text.match(/\/player\/(\d+)(?:\/([\d.]+))?/i);
   if (fromUrl) {
     return { accountId: fromUrl[1], urlMode: fromUrl[2] || null };
   }
@@ -174,26 +174,73 @@ function amaeRequestUrls(path) {
   const url = `${AMAE_API}${path}`;
   return [
     url,
-    // GitHub Pages is cross-origin; amae-koromo does not send CORS headers there.
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    // GitHub Pages cannot call amae-koromo directly; this reader still allows CORS.
+    `https://r.jina.ai/${url}`,
   ];
 }
 
+function parseAmaeBody(text) {
+  const trimmed = String(text || "").trim();
+  const marker = "Markdown Content:";
+  const idx = trimmed.indexOf(marker);
+  const payload = (idx >= 0 ? trimmed.slice(idx + marker.length) : trimmed).trim();
+  try {
+    return JSON.parse(payload);
+  } catch {
+    const startObj = payload.indexOf("{");
+    const startArr = payload.indexOf("[");
+    const start = [startObj, startArr].filter((i) => i >= 0).sort((a, b) => a - b)[0];
+    if (start == null) {
+      throw new Error("Unexpected MajSoul Stats response.");
+    }
+    return JSON.parse(payload.slice(start));
+  }
+}
+
+async function fetchWithTimeout(url, ms = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function readAmaeResponse(res) {
-  if (res.status === 404) {
+  const text = await res.text();
+  let data = null;
+  try {
+    data = parseAmaeBody(text);
+  } catch {
+    data = null;
+  }
+
+  const notFound =
+    res.status === 404 ||
+    /returned error 404/i.test(text) ||
+    (data && data.error === "id_not_found");
+  if (notFound) {
     const err = new Error("No recorded data for this player/room filter.");
     err.code = 404;
     throw err;
   }
-  if (res.status === 429) {
+  if (res.status === 429 || /returned error 429/i.test(text)) {
     const err = new Error("MajSoul Stats rate-limited the request. Wait a moment and try again.");
     err.code = 429;
     throw err;
   }
-  if (!res.ok) {
+  if (data == null) {
+    if (!res.ok) {
+      throw new Error(`MajSoul Stats request failed (${res.status}).`);
+    }
+    throw new Error("Unexpected MajSoul Stats response.");
+  }
+  if (!res.ok && res.status !== 200) {
     throw new Error(`MajSoul Stats request failed (${res.status}).`);
   }
-  return res.json();
+  return data;
 }
 
 async function amaeFetch(path) {
@@ -201,7 +248,7 @@ async function amaeFetch(path) {
   let lastError = null;
   for (const url of urls) {
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url);
       return await readAmaeResponse(res);
     } catch (err) {
       lastError = err;
@@ -210,9 +257,9 @@ async function amaeFetch(path) {
       }
     }
   }
-  if (lastError && lastError.name === "TypeError") {
+  if (lastError && (lastError.name === "TypeError" || lastError.name === "AbortError")) {
     throw new Error(
-      "Could not reach MajSoul Stats from this site (browser CORS). Try again, or fill the fields manually."
+      "Could not reach MajSoul Stats from this site. Try again, or fill the fields manually."
     );
   }
   throw lastError || new Error("Could not load MajSoul Stats.");
