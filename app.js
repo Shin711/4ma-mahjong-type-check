@@ -110,13 +110,32 @@ function clearImportMatches() {
   list.hidden = true;
 }
 
-function parseAccountId(raw) {
+const AMAE_MODE_LABELS = {
+  8: "Gold South",
+  9: "Gold East",
+  11: "Jade East",
+  12: "Jade South",
+  15: "Throne East",
+  16: "Throne South",
+};
+
+function parseImportQuery(raw) {
   const text = String(raw || "").trim();
-  if (!text) return null;
-  const fromUrl = text.match(/\/player\/(\d+)/i);
-  if (fromUrl) return fromUrl[1];
-  if (/^\d{5,}$/.test(text)) return text;
-  return null;
+  const fromUrl = text.match(/\/player\/(\d+)(?:\/(\d+))?/i);
+  if (fromUrl) {
+    return { accountId: fromUrl[1], urlMode: fromUrl[2] || null };
+  }
+  if (/^\d{5,}$/.test(text)) {
+    return { accountId: text, urlMode: null };
+  }
+  return { accountId: null, urlMode: null };
+}
+
+function describeMode(mode) {
+  return String(mode)
+    .split(".")
+    .map((id) => AMAE_MODE_LABELS[id] || `mode ${id}`)
+    .join(" + ");
 }
 
 function roundStat(value, { asPercent, integers }) {
@@ -208,11 +227,17 @@ async function searchAmaePlayers(query) {
   return data;
 }
 
-async function fetchExtendedStats(accountId, mode) {
+function amaeStatsPath(kind, accountId, mode) {
   const end = Date.now();
-  return amaeFetch(
-    `/player_extended_stats/${accountId}/${AMAE_EPOCH_MS}/${end}?mode=${encodeURIComponent(mode)}`
-  );
+  return `/${kind}/${accountId}/${AMAE_EPOCH_MS}/${end}?mode=${encodeURIComponent(mode)}`;
+}
+
+async function fetchExtendedStats(accountId, mode) {
+  return amaeFetch(amaeStatsPath("player_extended_stats", accountId, mode));
+}
+
+async function fetchPlayerOverview(accountId, mode) {
+  return amaeFetch(amaeStatsPath("player_stats", accountId, mode));
 }
 
 function levelLabel(level) {
@@ -247,8 +272,8 @@ function escapeHtml(text) {
     .replace(/"/g, "&quot;");
 }
 
-async function importPlayerById(accountId, nickname) {
-  const mode = document.getElementById("importMode").value;
+async function importPlayerById(accountId, nickname, modeOverride) {
+  const mode = modeOverride || document.getElementById("importMode").value;
   const searchBtn = document.getElementById("importSearchBtn");
   clearImportMatches();
   searchBtn.disabled = true;
@@ -257,18 +282,36 @@ async function importPlayerById(accountId, nickname) {
     null
   );
   try {
-    const stats = await fetchExtendedStats(accountId, mode);
+    const [stats, overview] = await Promise.all([
+      fetchExtendedStats(accountId, mode),
+      fetchPlayerOverview(accountId, mode).catch(() => null),
+    ]);
     const missing = fillFormFromExtendedStats(stats);
-    const games = stats.count != null ? `${stats.count} games` : "unknown game count";
+    const displayName = nickname || overview?.nickname || accountId;
+    const matches = overview?.count;
+    const hands = stats.count;
+    const room = describeMode(mode);
+    let games;
+    if (matches != null) {
+      games = `${matches} matches`;
+      if (hands != null && hands !== matches) {
+        games += ` / ${hands} hands`;
+      }
+    } else if (hands != null) {
+      games = `${hands} hands`;
+    } else {
+      games = "unknown match count";
+    }
+    games += ` (${room})`;
     if (missing.length) {
       setImportStatus(
-        `Imported ${nickname || accountId} (${games}), but missing: ${missing.join(", ")}.`,
+        `Imported ${displayName} (${games}), but missing: ${missing.join(", ")}.`,
         "error"
       );
       return;
     }
     setImportStatus(
-      `Imported ${nickname || accountId} — ${games}. Click Analyze when ready.`,
+      `Imported ${displayName} — ${games}. Click Analyze when ready.`,
       "ok"
     );
   } catch (err) {
@@ -291,9 +334,9 @@ async function runImportSearch() {
   searchBtn.disabled = true;
   setImportStatus("Searching MajSoul Stats…", null);
   try {
-    const accountId = parseAccountId(query);
-    if (accountId) {
-      await importPlayerById(accountId, null);
+    const parsed = parseImportQuery(query);
+    if (parsed.accountId) {
+      await importPlayerById(parsed.accountId, null, parsed.urlMode);
       return;
     }
     const matches = await searchAmaePlayers(query);
