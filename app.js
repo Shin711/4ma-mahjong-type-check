@@ -151,10 +151,16 @@ function fillFormFromExtendedStats(stats) {
   return missing;
 }
 
-async function amaeFetch(path) {
-  const res = await fetch(`${AMAE_API}${path}`, {
-    headers: { Accept: "application/json" },
-  });
+function amaeRequestUrls(path) {
+  const url = `${AMAE_API}${path}`;
+  return [
+    url,
+    // GitHub Pages is cross-origin; amae-koromo does not send CORS headers there.
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  ];
+}
+
+async function readAmaeResponse(res) {
   if (res.status === 404) {
     const err = new Error("No recorded data for this player/room filter.");
     err.code = 404;
@@ -169,6 +175,28 @@ async function amaeFetch(path) {
     throw new Error(`MajSoul Stats request failed (${res.status}).`);
   }
   return res.json();
+}
+
+async function amaeFetch(path) {
+  const urls = amaeRequestUrls(path);
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      return await readAmaeResponse(res);
+    } catch (err) {
+      lastError = err;
+      if (err && (err.code === 404 || err.code === 429)) {
+        throw err;
+      }
+    }
+  }
+  if (lastError && lastError.name === "TypeError") {
+    throw new Error(
+      "Could not reach MajSoul Stats from this site (browser CORS). Try again, or fill the fields manually."
+    );
+  }
+  throw lastError || new Error("Could not load MajSoul Stats.");
 }
 
 async function searchAmaePlayers(query) {
