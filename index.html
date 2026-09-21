@@ -16,7 +16,7 @@
         Import from
         <a href="https://amae-koromo.sapk.ch/" target="_blank" rel="noopener noreferrer">MajSoul Stats (amae-koromo)</a>
         with a player name, account ID, or player-page URL — or fill the 12 fields manually.
-        <strong>Jade room</strong> stats are recommended (the model was fit on Soul-level Jade data).
+        Default room is <strong>Gold+</strong> (more Expert-level games). The model was fit on Soul-level Jade data, so switch to Jade if you have a solid sample there.
       </li>
       <li>Coverage is limited to games amae-koromo has recorded (public ranked Gold+); many accounts will be missing.</li>
       <li>Click <strong>Analyze</strong> to see your intensity, playstyle type, and plot position.</li>
@@ -38,8 +38,8 @@
       <input type="text" id="importQuery" placeholder="e.g. nickname, 67220368, or amae-koromo.sapk.ch/player/…" autocomplete="off">
       <label class="visually-hidden" for="importMode">Room filter</label>
       <select id="importMode" title="Room filter">
-        <option value="12.11" selected>Jade (recommended)</option>
-        <option value="16.12.9.15.11.8">Gold+ (more games)</option>
+        <option value="16.12.9.15.11.8" selected>Gold+ (default)</option>
+        <option value="12.11">Jade (model baseline)</option>
         <option value="16.15">Throne only</option>
       </select>
       <button type="button" id="importSearchBtn">Search</button>
@@ -121,6 +121,6 @@
     </p>
   </footer>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

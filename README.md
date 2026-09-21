@@ -2,7 +2,7 @@
 
 Unofficial English-friendly derivative of **[四麻スタイル分析（雀魂牌譜屋連動）](https://yurakuurame.github.io/4ma-majang-type-check/)** by [悠楽うらめ (yurakuurame)](https://github.com/yurakuurame).
 
-Paste 12 [MajSoul Stats](https://amae-koromo.sapk.ch/) fields (Jade room recommended), and the tool projects them onto the same 2 PCA axes as the original, classifying **intensity** (Balanced → Extreme) and **playstyle type** (Late Counter, Closed Value, Iron Wall, Lead and Fold, Open Speed, All-In Fighter).
+Import or paste 12 [MajSoul Stats](https://amae-koromo.sapk.ch/) fields (Gold+ by default; the model was fit on Jade). The tool projects them onto the same 2 PCA axes as the original, classifying **intensity** (Balanced → Extreme) and **playstyle type** (Late Counter, Closed Value, Iron Wall, Lead and Fold, Open Speed, All-In Fighter).
 
 ## Credits
 
